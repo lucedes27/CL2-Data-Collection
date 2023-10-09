@@ -2,6 +2,7 @@ from casadi import SX, vertcat
 import casadi as ca
 import time
 import carla
+import csv
 
 ## SETUP ##
 # Connect to CARLA
@@ -111,20 +112,21 @@ ub_g = ca.MX([ca.inf]*state_dim*N)
 # Initialize spectator camera
 move_spectator_to_vehicle(vehicle, spectator)
 
+# Initialize a list to store data
+combined_data = []
+
 # Loop to have the vehicle follow the waypoints using Model Predictive Control
-while True:
+for i in range(10):
+    print(f"Iteration {i}")
+
     # Get the current vehicle state
     x0 = vehicle.get_transform().location.x
     y0 = vehicle.get_transform().location.y
     theta0 = vehicle.get_transform().rotation.yaw / 180 * ca.pi
     v0 = vehicle.get_velocity().x
 
-    print(f"Current state: x={x0}, y={y0}, theta={theta0}, v={v0}")
-
     # Initialize an initial guess for controls
     initial_guess = ca.DM.zeros(N * control_dim)
-
-    print(f"Initial guess for controls: {initial_guess}")
 
     # Initial state
     initial_state = ca.vertcat(x0, y0, theta0, v0)
@@ -145,6 +147,7 @@ while True:
 
     print(f"Parameter vector p: {p}")
 
+    print("Solving optimization problem...")
     # Solve the optimization problem
     sol = solver(x0=initial_guess, p=p)
 
@@ -154,7 +157,7 @@ while True:
 
         controls = sol['x'].full().flatten()
 
-        print(f"Optimal controls: {controls}")
+        # print(f"Optimal controls: {controls}")
 
         # Extract the first control and normalize it if needed
         throttle = float(controls[1])
@@ -165,15 +168,39 @@ while True:
         # Apply the first control input to the vehicle
         vehicle.apply_control(carla.VehicleControl(throttle=throttle, steer=steer))
 
-        print("Control applied to vehicle.")
-
         # Move the spectator camera
         move_spectator_to_vehicle(vehicle, spectator)
 
-        print("Spectator camera moved.")
     else:
         print("Solver did not find a solution.")
 
+    # Calculate the predicted state
+    predicted_state = euler_discretization(bicycle_model, ca.vertcat(x0, y0, theta0, v0),
+                                           ca.vertcat(steer, throttle), params, dt).full().flatten().tolist()
+
+    # Fetch the actual new state
+    actual_x = vehicle.get_transform().location.x
+    actual_y = vehicle.get_transform().location.y
+    actual_theta = vehicle.get_transform().rotation.yaw / 180 * ca.pi
+    actual_v = vehicle.get_velocity().x
+    actual_state = [actual_x, actual_y, actual_theta, actual_v]
+
+    # Calculate and record the residual
+    residual = [a_i - p_i for a_i, p_i in zip(actual_state, predicted_state)]
+
+    # Store data in a single list
+    combined_row = actual_state + predicted_state + residual
+    combined_data.append(combined_row)
+
     # Sleep for a bit
     time.sleep(dt)
-    print("Sleeping for next iteration.\n")
+
+print("Done. Recording residuals CSV file.\n")
+
+# Write the actual states, predicted states, and residuals to a CSV file
+with open('combined_data.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['Actual_x', 'Actual_y', 'Actual_theta', 'Actual_v', 'Predicted_x', 'Predicted_y', 'Predicted_theta', 'Predicted_v', 'Residual_x', 'Residual_y', 'Residual_theta', 'Residual_v'])
+    writer.writerows(combined_data)
+
+
