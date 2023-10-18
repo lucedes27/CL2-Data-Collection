@@ -11,6 +11,7 @@ world = client.get_world()
 mymap = world.get_map()
 spectator = world.get_spectator()
 
+# Output client and world objects to console
 print(client)
 print(world)
 
@@ -38,169 +39,90 @@ else:
     vehicle = vehicles[0]
 print(vehicle)
 
-
-## MPC SETUP ##
-def bicycle_model(state, controls, params):
-    x, y, theta, v = state[0], state[1], state[2], state[3]
-    phi, a = controls[0], controls[1]
-    L = params['L']
-
-    dx = v * SX.cos(theta)
-    dy = v * SX.sin(theta)
-    dtheta = v / L * SX.tan(phi)
-    dv = a
-
-    return vertcat(dx, dy, dtheta, dv)
-
-
-def euler_discretization(model, state, controls, params, dt):
-    return state + dt * model(state, controls, params)
-
-
 # Parameters
-params = {'L': 2.5}
-N = 20  # Prediction horizon
-dt = 0.1  # Time step
-state_dim = 4
-control_dim = 2
+params = {'L': 2.5}  # Wheelbase of the vehicle
+N = 20  # Prediction horizon for optimization prbolem
+dt = 0.1  # Time step for discretization
+state_dim = 4  # Dimension of the state [x, y, theta, v]
+control_dim = 2  # Dimension of the control input [steering angle, acceleration]
 
-# Symbolic variables
-U = ca.MX.sym('U', N * control_dim)  # Control trajectory over the horizon
-X = ca.MX.sym('X', state_dim)  # Initial state
-P = ca.MX.sym('P', N * state_dim)  # Waypoints over the horizon
+# Initialize Opti object
+opti = ca.Opti()
 
-# Objective and constraints
-Q = ca.MX.eye(state_dim)  # State penalty matrix
-R = ca.MX.eye(control_dim)  # Control penalty matrix
+# Declare variables
+X = opti.variable(state_dim, N + 1)  # state trajectory variables over prediction horizon
+U = opti.variable(control_dim, N)  # control trajectory variables over prediction horizon
+P = opti.parameter(state_dim)  # initial state parameter
+Q = ca.MX.eye(state_dim)  # state penalty matrix for objective function
+R = ca.MX.eye(control_dim)  # control penalty matrix for objective function
+W = opti.parameter(2)  # Waypoint parameter
 
-# Initialize objective and constraints
+# Objective
 obj = 0
-g = []
-X_k = X
-
-# Loop over each step in the prediction horizon to build objective and constraints
 for k in range(N):
-    u_k = U[k * control_dim:(k + 1) * control_dim]
-    p_k = P[k * state_dim:(k + 1) * state_dim]
+    x_k = X[:, k]  # Current state
+    u_k = U[:, k]  # Current control input
+    x_next = X[:, k + 1]  # Next state
 
-    # Add to objective
-    obj += ca.mtimes([(X_k - p_k).T, Q, X_k - p_k]) + ca.mtimes([u_k.T, R, u_k])
+    x_ref = ca.vertcat(W, ca.MX.zeros(state_dim - 2, 1))  # Reference state with waypoint and zero for other states
 
-    # Update state (Euler discretization)
-    X_k = euler_discretization(bicycle_model, X_k, u_k, params, dt)
-    g.append(X_k)
+    dx = x_k - x_ref  # Deviation of state from reference state
+    du = u_k  # Control input deviation (assuming a desired control input of zero)
 
-lb_U = ca.MX([-0.5] * N + [-1.0] * N)  # Lower bounds for [steer, throttle]
-ub_U = ca.MX([0.5] * N + [1.0] * N)  # Upper bounds for [steer, throttle]
+    # Quadratic cost with reference state and control input
+    obj += ca.mtimes([ca.mtimes(dx.T, Q), dx]) + ca.mtimes(
+        [ca.mtimes(du.T, R), du])  # Minimize quadratic cost and deviation from reference state
 
-# Optimization problem
-opts = {'ipopt.print_level': 0, 'print_time': 0}
-nlp = {'x': U, 'f': obj, 'g': ca.vertcat(*g), 'p': ca.vertcat(X, P)}
-solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
+opti.minimize(obj)
 
-lb_g = ca.MX([-ca.inf]*state_dim*N)
-ub_g = ca.MX([ca.inf]*state_dim*N)
+# Dynamics (Euler discretization using bicycle model)
+for k in range(N):
+    opti.subject_to(X[:, k + 1] == X[:, k] + dt * ca.vertcat(
+        X[3, k] * ca.cos(X[2, k]),
+        X[3, k] * ca.sin(X[2, k]),
+        X[3, k] / params['L'] * ca.tan(U[0, k]),
+        U[1, k]
+    ))
 
-# Set up waypoints to form a circle around spawn point
-# waypoints = []
-# for i in range(N):
-#     angle = i * 2 * ca.pi / N
-#     x = 5 * ca.cos(angle)
-#     y = 5 * ca.sin(angle)
-#     waypoints.append(ca.vertcat(x, y, 0, 0))
+# Initial constraints
+opti.subject_to(X[:, 0] == P)
 
-# Initialize spectator camera
-move_spectator_to_vehicle(vehicle, spectator)
+# Input constraints
+opti.subject_to(opti.bounded(-0.5, U[0, :], 0.5))  # Steering angle
+opti.subject_to(opti.bounded(-1.0, U[1, :], 1.0))  # Acceleration
 
-# Initialize a list to store data
-combined_data = []
+# Setup solver
+opts = {'ipopt.print_level': 0, 'print_time': 0}  # Solver options for ipopt
+opti.solver('ipopt', opts)
 
-# Loop to have the vehicle follow the waypoints using Model Predictive Control
+# Main Loop
 for i in range(10):
-    print(f"Iteration {i}")
+    move_spectator_to_vehicle(vehicle, spectator)
 
-    # Get the current vehicle state
+    #  Fetch initial state from CARLA
     x0 = vehicle.get_transform().location.x
     y0 = vehicle.get_transform().location.y
     theta0 = vehicle.get_transform().rotation.yaw / 180 * ca.pi
     v0 = vehicle.get_velocity().x
 
-    # Initialize an initial guess for controls
-    initial_guess = ca.DM.zeros(N * control_dim)
-
-    # Initial state
+    # Set initial state for optimization problem
     initial_state = ca.vertcat(x0, y0, theta0, v0)
+    opti.set_value(P, initial_state)
 
-    print(f"Initial state: {initial_state}")
+    # Calculate the waypoint in front of the car
+    waypoint = ca.vertcat(x0 + 10 * ca.cos(theta0), y0 + 10 * ca.sin(theta0))
+    opti.set_value(W, waypoint)
 
-    # Calculate the single waypoint in front of the car
-    waypoint_distance = 2.0  # Distance ahead of the car for the waypoint
-    x_waypoint = x0 + waypoint_distance * ca.cos(theta0)
-    y_waypoint = y0 + waypoint_distance * ca.sin(theta0)
-    single_waypoint = ca.vertcat(x_waypoint, y_waypoint, 0, 0)
-    waypoints = [single_waypoint] * N
-
-    print(f"Waypoint: {single_waypoint}")
-
-    # Concatenate initial_state and waypoints as the p parameter
-    p = ca.vertcat(initial_state, ca.reshape(ca.vertcat(*waypoints), -1, 1))
-
-    print(f"Parameter vector p: {p}")
-
-    print("Solving optimization problem...")
     # Solve the optimization problem
-    sol = solver(x0=initial_guess, p=p)
+    sol = opti.solve()
 
-    if sol['f'] is not None:
-        print("Solver found a solution.")
-        print(f"Objective value: {float(sol['f'])}")
-
-        controls = sol['x'].full().flatten()
-
-        # print(f"Optimal controls: {controls}")
-
-        # Extract the first control and normalize it if needed
-        throttle = float(controls[1])
-        steer = float(controls[0])
-
-        print(f"Throttle: {throttle}, Steer: {steer}")
-
-        # Apply the first control input to the vehicle
-        vehicle.apply_control(carla.VehicleControl(throttle=throttle, steer=steer))
-
-        # Move the spectator camera
-        move_spectator_to_vehicle(vehicle, spectator)
-
+    # If the solver is successful, apply the first control input to the vehicle
+    if sol.stats()['success']:
+        u = sol.value(U[:, 0])
+        vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
     else:
-        print("Solver did not find a solution.")
+        print("Error in optimization problem.")
 
-    # Calculate the predicted state
-    predicted_state = euler_discretization(bicycle_model, ca.vertcat(x0, y0, theta0, v0),
-                                           ca.vertcat(steer, throttle), params, dt).full().flatten().tolist()
-
-    # Fetch the actual new state
-    actual_x = vehicle.get_transform().location.x
-    actual_y = vehicle.get_transform().location.y
-    actual_theta = vehicle.get_transform().rotation.yaw / 180 * ca.pi
-    actual_v = vehicle.get_velocity().x
-    actual_state = [actual_x, actual_y, actual_theta, actual_v]
-
-    # Calculate and record the residual
-    residual = [a_i - p_i for a_i, p_i in zip(actual_state, predicted_state)]
-
-    # Store data in a single list
-    combined_row = actual_state + predicted_state + residual
-    combined_data.append(combined_row)
-
-    # Sleep for a bit
     time.sleep(dt)
 
-print("Done. Recording residuals CSV file.\n")
-
-# Write the actual states, predicted states, and residuals to a CSV file
-with open('combined_data.csv', 'w', newline='') as f:
-    writer = csv.writer(f)
-    writer.writerow(['Actual_x', 'Actual_y', 'Actual_theta', 'Actual_v', 'Predicted_x', 'Predicted_y', 'Predicted_theta', 'Predicted_v', 'Residual_x', 'Residual_y', 'Residual_theta', 'Residual_v'])
-    writer.writerows(combined_data)
-
-
+print("Done.")
