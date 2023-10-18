@@ -95,6 +95,10 @@ opti.subject_to(opti.bounded(-1.0, U[1, :], 1.0))  # Acceleration
 opts = {'ipopt.print_level': 0, 'print_time': 0}  # Solver options for ipopt
 opti.solver('ipopt', opts)
 
+# Initialize warm-start parameters
+prev_sol_x = None
+prev_sol_u = None
+
 # Main Loop
 for i in range(10):
     move_spectator_to_vehicle(vehicle, spectator)
@@ -113,6 +117,11 @@ for i in range(10):
     waypoint = ca.vertcat(x0 + 10 * ca.cos(theta0), y0 + 10 * ca.sin(theta0))
     opti.set_value(W, waypoint)
 
+    if prev_sol_x is not None and prev_sol_u is not None:
+        # Warm-starting the solver with the previous solution
+        opti.set_initial(X, prev_sol_x)
+        opti.set_initial(U, prev_sol_u)
+
     # Solve the optimization problem
     sol = opti.solve()
 
@@ -120,6 +129,10 @@ for i in range(10):
     if sol.stats()['success']:
         u = sol.value(U[:, 0])
         vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
+
+        # Update previous solution variables for warm-starting next iteration
+        prev_sol_x = sol.value(X)
+        prev_sol_u = sol.value(U)
     else:
         print("Error in optimization problem.")
 
