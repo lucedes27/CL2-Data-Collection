@@ -92,7 +92,19 @@ opti.subject_to(opti.bounded(-0.5, U[0, :], 0.5))  # Steering angle
 opti.subject_to(opti.bounded(-1.0, U[1, :], 1.0))  # Acceleration
 
 # Setup solver
-opts = {'ipopt.print_level': 0, 'print_time': 0}  # Solver options for ipopt
+acceptable_dual_inf_tol = 1e11
+acceptable_compl_inf_tol = 1e-3
+acceptable_iter = 10
+acceptable_constr_viol_tol = 1e-3
+acceptable_tol = 1e4
+
+opts = {"ipopt.acceptable_tol": acceptable_tol,
+        "ipopt.acceptable_constr_viol_tol": acceptable_constr_viol_tol,
+        "ipopt.acceptable_dual_inf_tol": acceptable_dual_inf_tol,
+        "ipopt.acceptable_iter": acceptable_iter,
+        "ipopt.acceptable_compl_inf_tol": acceptable_compl_inf_tol,
+        "ipopt.hessian_approximation": "limited-memory",
+        "ipopt.print_level": 5}
 opti.solver('ipopt', opts)
 
 # Initialize warm-start parameters
