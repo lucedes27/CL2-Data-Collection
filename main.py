@@ -11,6 +11,12 @@ world = client.get_world()
 mymap = world.get_map()
 spectator = world.get_spectator()
 
+settings = world.get_settings()
+settings.synchronous_mode = True  # Enables synchronous mode
+TIME_STEP = 0.05  # Time step for synchronous mode
+settings.fixed_delta_seconds = TIME_STEP
+world.apply_settings(settings)
+
 # Output client and world objects to console
 print(client)
 print(world)
@@ -42,7 +48,7 @@ print(vehicle)
 # Parameters
 params = {'L': 2.5}  # Wheelbase of the vehicle
 N = 20  # Prediction horizon for optimization prbolem
-dt = 0.1  # Time step for discretization
+dt = TIME_STEP  # Time step for discretization
 state_dim = 4  # Dimension of the state [x, y, theta, v]
 control_dim = 2  # Dimension of the control input [steering angle, acceleration]
 
@@ -112,7 +118,7 @@ prev_sol_x = None
 prev_sol_u = None
 
 # Main Loop
-for i in range(10):
+for i in range(100):
     move_spectator_to_vehicle(vehicle, spectator)
 
     #  Fetch initial state from CARLA
@@ -148,6 +154,6 @@ for i in range(10):
     else:
         print("Error in optimization problem.")
 
-    time.sleep(dt)
+    world.tick()  # Tick the CARLA world
 
 print("Done.")
