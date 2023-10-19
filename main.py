@@ -96,7 +96,7 @@ for k in range(N):
 opti.subject_to(X[:, 0] == P)  # Initial state constraint
 
 # Input constraints
-steering_angle_bounds = [0.0, 1.0]
+steering_angle_bounds = [-1.0, 1.0]
 acceleration_bounds = [0.0, 1.0]
 lb = np.array([steering_angle_bounds[0], acceleration_bounds[0]]).reshape(-1, 1)
 ub = np.array([steering_angle_bounds[1], acceleration_bounds[1]]).reshape(-1, 1)
