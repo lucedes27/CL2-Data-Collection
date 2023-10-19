@@ -83,12 +83,17 @@ for k in range(N):
 
 opti.minimize(obj)
 
+# Maximum steerin angle for dynamics
+max_steering_angle_deg = 70  # Maximum steering angle in degrees
+max_steering_angle_rad = max_steering_angle_deg * (ca.pi / 180)  # Maximum steering angle in radians
+
 # Dynamics (Euler discretization using bicycle model)
 for k in range(N):
+    steering_angle_rad = U[0, k] * max_steering_angle_rad  # Convert normalized steering angle to radians
     opti.subject_to(X[:, k + 1] == X[:, k] + dt * ca.vertcat(
         X[3, k] * ca.cos(X[2, k]),
         X[3, k] * ca.sin(X[2, k]),
-        X[3, k] / params['L'] * ca.tan(U[0, k]),
+        X[3, k] / params['L'] * ca.tan(steering_angle_rad),
         U[1, k]
     ))
 
