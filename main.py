@@ -2,7 +2,9 @@ from casadi import SX, vertcat
 import casadi as ca
 import time
 import carla
+import numpy as np
 import csv
+from boxconstraint import BoxConstraint
 
 ## SETUP ##
 # Connect to CARLA
@@ -90,12 +92,20 @@ for k in range(N):
         U[1, k]
     ))
 
-# Initial constraints
-opti.subject_to(X[:, 0] == P)
+# Constraints
+opti.subject_to(X[:, 0] == P)  # Initial state constraint
 
 # Input constraints
-opti.subject_to(opti.bounded(-0.5, U[0, :], 0.5))  # Steering angle
-opti.subject_to(opti.bounded(-1.0, U[1, :], 1.0))  # Acceleration
+steering_angle_bounds = [0.0, 1.0]
+acceleration_bounds = [0.0, 1.0]
+lb = np.array([steering_angle_bounds[0], acceleration_bounds[0]]).reshape(-1, 1)
+ub = np.array([steering_angle_bounds[1], acceleration_bounds[1]]).reshape(-1, 1)
+action_space = BoxConstraint(lb=lb, ub=ub)
+
+# Apply constraints to optimization problem
+for i in range(N):
+    # Input constraints
+    opti.subject_to(action_space.H_np @ U[:, i] <= action_space.b_np)
 
 # Setup solver
 acceptable_dual_inf_tol = 1e11
