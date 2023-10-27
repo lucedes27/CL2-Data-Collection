@@ -62,7 +62,7 @@ X = opti.variable(state_dim, N + 1)  # state trajectory variables over predictio
 U = opti.variable(control_dim, N)  # control trajectory variables over prediction horizon
 P = opti.parameter(state_dim)  # initial state parameter
 Q = ca.MX.eye(state_dim)  # state penalty matrix for objective function
-R = ca.MX.eye(control_dim)  # control penalty matrix for objective function
+R = 0.1 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
 W = opti.parameter(2)  # Waypoint parameter
 
 # Objective
