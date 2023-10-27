@@ -51,6 +51,27 @@ else:
     vehicle = vehicles[0]
 print(vehicle)
 
+# Get spawn coordinates and orientation
+x_spawn = spawn_point.location.x
+y_spawn = spawn_point.location.y
+theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
+
+
+def generate_waypoint_relative_to_spawn(forward_offset=0, sideways_offset=0):
+    # Positive forward_offset moves the waypoint in front of the vehicle
+    # Positive (input) sideways_offset moves the waypoint to the right of the vehicle
+    sideways_offset = -sideways_offset
+    return ca.vertcat(
+        x_spawn + forward_offset * ca.cos(theta_spawn) + sideways_offset * ca.sin(theta_spawn),
+        y_spawn + forward_offset * ca.sin(theta_spawn) - sideways_offset * ca.cos(theta_spawn)
+    )
+
+
+waypoints = []
+
+for i in range(1000):
+    waypoints.append(generate_waypoint_relative_to_spawn(10, 0))
+
 # Parameters
 params = {'L': 2.5}  # Wheelbase of the vehicle
 N = 20  # Prediction horizon for optimization prbolem
@@ -129,7 +150,7 @@ opts = {"ipopt.acceptable_tol": acceptable_tol,
         "ipopt.acceptable_iter": acceptable_iter,
         "ipopt.acceptable_compl_inf_tol": acceptable_compl_inf_tol,
         "ipopt.hessian_approximation": "limited-memory",
-        "ipopt.print_level": 5}
+        "ipopt.print_level": 0}
 opti.solver('ipopt', opts)
 
 # Initialize warm-start parameters
@@ -137,7 +158,9 @@ prev_sol_x = None
 prev_sol_u = None
 
 # Main Loop
-for i in range(100):
+for i in range(1000):
+    print("Iteration: ", i)
+
     move_spectator_to_vehicle(vehicle, spectator)
 
     #  Fetch initial state from CARLA
@@ -151,8 +174,8 @@ for i in range(100):
     opti.set_value(P, initial_state)
 
     # Calculate the waypoint in front of the car
-    waypoint = ca.vertcat(x0 + 10 * ca.cos(theta0), y0 + 10 * ca.sin(theta0))
-    opti.set_value(W, waypoint)
+    # waypoint = ca.vertcat(x0 + 10 * ca.cos(theta0), y0 + 10 * ca.sin(theta0))
+    opti.set_value(W, waypoints[i])
 
     if prev_sol_x is not None and prev_sol_u is not None:
         # Warm-starting the solver with the previous solution
