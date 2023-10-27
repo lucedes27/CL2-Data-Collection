@@ -13,10 +13,14 @@ world = client.get_world()
 mymap = world.get_map()
 spectator = world.get_spectator()
 
+# CARLA Settings
 settings = world.get_settings()
 settings.synchronous_mode = True  # Enables synchronous mode
 TIME_STEP = 0.05  # Time step for synchronous mode
 settings.fixed_delta_seconds = TIME_STEP
+settings.substepping = True
+settings.max_substep_delta_time = 0.01
+settings.max_substeps = 10
 world.apply_settings(settings)
 
 # Output client and world objects to console
