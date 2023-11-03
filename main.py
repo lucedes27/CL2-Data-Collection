@@ -1,8 +1,13 @@
 import carla
 import casadi as ca
 import numpy as np
+import matplotlib.pyplot as plt
+import datetime
+import os
 
 from boxconstraint import BoxConstraint
+
+SIM_DURATION = 1000  # Simulation duration in time steps
 
 ## SETUP ##
 # Connect to CARLA
@@ -153,12 +158,19 @@ opts = {"ipopt.acceptable_tol": acceptable_tol,
         "ipopt.print_level": 0}
 opti.solver('ipopt', opts)
 
+# Array to store closed-loop trajectory states
+closed_loop_trajectory = np.zeros((2, SIM_DURATION))  # Store X and Y coordinates
+
 # Initialize warm-start parameters
 prev_sol_x = None
 prev_sol_u = None
 
+# Clear debug_plots folder
+for filename in os.listdir('debug_plots'):
+    os.remove('debug_plots/' + filename)
+
 # Main Loop
-for i in range(1000):
+for i in range(SIM_DURATION):
     print("Iteration: ", i)
 
     move_spectator_to_vehicle(vehicle, spectator)
@@ -168,6 +180,9 @@ for i in range(1000):
     y0 = vehicle.get_transform().location.y
     theta0 = vehicle.get_transform().rotation.yaw / 180 * ca.pi
     v0 = vehicle.get_velocity().x
+
+    # Append current state
+    closed_loop_trajectory[:, i] = np.array([x0, y0]).reshape(-1)
 
     # Set initial state for optimization problem
     initial_state = ca.vertcat(x0, y0, theta0, v0)
@@ -193,6 +208,27 @@ for i in range(1000):
         # Update previous solution variables for warm-starting next iteration
         prev_sol_x = sol.value(X)
         prev_sol_u = sol.value(U)
+
+        # Plot open-loop trajectory
+        fig, ax = plt.subplots(1,1)
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+
+        # Plot current state and goal state
+        ax.plot(x0, y0, 'go')
+        ax.plot(waypoints[i][0], waypoints[i][1], 'ro')
+
+        # Plot open-loop trajectory
+        ax.plot(opti.debug.value(X)[0, :], opti.debug.value(X)[1, :], 'b-')
+
+        # Plot closed-loop trajectory
+        ax.plot(closed_loop_trajectory[0, :i], closed_loop_trajectory[1, :i], 'k--')
+
+        # Display cost
+        ax.text(0.1, 0.9, "Cost: {:.2f}".format(sol.value(obj)), transform=ax.transAxes)
+
+        plt.savefig("debug_plots/{}_{}.png".format(i, datetime.datetime.now()))
+        plt.close(fig)
     else:
         print("Error in optimization problem.")
 
