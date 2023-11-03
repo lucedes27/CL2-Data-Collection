@@ -158,8 +158,8 @@ opts = {"ipopt.acceptable_tol": acceptable_tol,
         "ipopt.print_level": 0}
 opti.solver('ipopt', opts)
 
-# Array to store closed-loop trajectory states
-closed_loop_trajectory = np.zeros((2, SIM_DURATION))  # Store X and Y coordinates
+# Array to store closed-loop trajectory states (X and Y coordinates)
+closed_loop_trajectory = []
 
 # Initialize warm-start parameters
 prev_sol_x = None
@@ -179,10 +179,11 @@ for i in range(SIM_DURATION):
     x0 = vehicle.get_transform().location.x
     y0 = vehicle.get_transform().location.y
     theta0 = vehicle.get_transform().rotation.yaw / 180 * ca.pi
-    v0 = vehicle.get_velocity().x
+    velocity_vector = vehicle.get_velocity()
+    v0 = ca.sqrt(velocity_vector.x ** 2 + velocity_vector.y ** 2)
 
     # Append current state
-    closed_loop_trajectory[:, i] = np.array([x0, y0]).reshape(-1)
+    closed_loop_trajectory.append([x0, y0])
 
     # Set initial state for optimization problem
     initial_state = ca.vertcat(x0, y0, theta0, v0)
@@ -214,6 +215,10 @@ for i in range(SIM_DURATION):
         ax.set_xlabel('x')
         ax.set_ylabel('y')
 
+        # Plot spawn point and arrow for spawn orientation
+        ax.plot(x_spawn, y_spawn, 'bo')
+        ax.arrow(x_spawn, y_spawn, 1 * ca.cos(theta_spawn), 1 * ca.sin(theta_spawn), width=0.1)
+
         # Plot current state and goal state
         ax.plot(x0, y0, 'go')
         ax.plot(waypoints[i][0], waypoints[i][1], 'ro')
@@ -222,7 +227,7 @@ for i in range(SIM_DURATION):
         ax.plot(opti.debug.value(X)[0, :], opti.debug.value(X)[1, :], 'b-')
 
         # Plot closed-loop trajectory
-        ax.plot(closed_loop_trajectory[0, :i], closed_loop_trajectory[1, :i], 'k--')
+        ax.plot([x[0] for x in closed_loop_trajectory], [x[1] for x in closed_loop_trajectory], 'g-')
 
         # Display cost
         ax.text(0.1, 0.9, "Cost: {:.2f}".format(sol.value(obj)), transform=ax.transAxes)
