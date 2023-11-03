@@ -1,9 +1,7 @@
-from casadi import SX, vertcat
-import casadi as ca
-import time
 import carla
+import casadi as ca
 import numpy as np
-import csv
+
 from boxconstraint import BoxConstraint
 
 ## SETUP ##
@@ -42,13 +40,15 @@ spawn_point = spawn_points[0]
 
 # Spawn vehicle
 vehicles = world.get_actors().filter('vehicle.*')
+blueprint_library = world.get_blueprint_library()
+vehicle_bp = blueprint_library.filter('model3')[0]
 if len(vehicles) == 0:
-    blueprint_library = world.get_blueprint_library()
-    vehicle_bp = blueprint_library.filter('model3')[0]
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
-    # vehicle.set_autopilot(True)
 else:
-    vehicle = vehicles[0]
+    # Reset world
+    for vehicle in vehicles:
+        vehicle.destroy()
+    vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 print(vehicle)
 
 # Get spawn coordinates and orientation
