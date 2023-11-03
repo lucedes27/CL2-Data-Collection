@@ -93,7 +93,7 @@ U = opti.variable(control_dim, N)  # control trajectory variables over predictio
 P = opti.parameter(state_dim)  # initial state parameter
 Q = ca.MX.eye(state_dim)  # state penalty matrix for objective function
 R = 0.1 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
-W = opti.parameter(2)  # Waypoint parameter
+W = opti.parameter(2, N)  # Reference trajectory parameter
 
 # Objective
 obj = 0
@@ -102,7 +102,8 @@ for k in range(N):
     u_k = U[:, k]  # Current control input
     x_next = X[:, k + 1]  # Next state
 
-    x_ref = ca.vertcat(W, ca.MX.zeros(state_dim - 2, 1))  # Reference state with waypoint and zero for other states
+    x_ref = ca.vertcat(W[:, k],
+                       ca.MX.zeros(state_dim - 2, 1))  # Reference state with waypoint and zero for other states
 
     dx = x_k - x_ref  # Deviation of state from reference state
     du = u_k  # Control input deviation (assuming a desired control input of zero)
@@ -170,7 +171,7 @@ for filename in os.listdir('debug_plots'):
     os.remove('debug_plots/' + filename)
 
 # Main Loop
-for i in range(SIM_DURATION):
+for i in range(SIM_DURATION - N):
     print("Iteration: ", i)
 
     move_spectator_to_vehicle(vehicle, spectator)
@@ -189,9 +190,8 @@ for i in range(SIM_DURATION):
     initial_state = ca.vertcat(x0, y0, theta0, v0)
     opti.set_value(P, initial_state)
 
-    # Calculate the waypoint in front of the car
-    # waypoint = ca.vertcat(x0 + 10 * ca.cos(theta0), y0 + 10 * ca.sin(theta0))
-    opti.set_value(W, waypoints[i])
+    # Set the reference trajectory for the current iteration
+    opti.set_value(W, ca.horzcat(*waypoints[i:i + N]))  # Concatenate waypoints
 
     if prev_sol_x is not None and prev_sol_u is not None:
         # Warm-starting the solver with the previous solution
@@ -211,7 +211,7 @@ for i in range(SIM_DURATION):
         prev_sol_u = sol.value(U)
 
         # Plot open-loop trajectory
-        fig, ax = plt.subplots(1,1)
+        fig, ax = plt.subplots(1, 1)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
 
