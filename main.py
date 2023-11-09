@@ -7,7 +7,7 @@ import os
 
 from boxconstraint import BoxConstraint
 
-SIM_DURATION = 200  # Simulation duration in time steps
+SIM_DURATION = 250  # Simulation duration in time steps
 
 ## SETUP ##
 # Connect to CARLA
@@ -74,7 +74,7 @@ def generate_waypoint_relative_to_spawn(forward_offset=0, sideways_offset=0):
 
 waypoints = []
 
-for i in range(1000):
+for i in range(SIM_DURATION):
     waypoints.append(generate_waypoint_relative_to_spawn(10, 0))
 
 # Parameters
@@ -160,7 +160,9 @@ opts = {"ipopt.acceptable_tol": acceptable_tol,
 opti.solver('ipopt', opts)
 
 # Array to store closed-loop trajectory states (X and Y coordinates)
-closed_loop_trajectory = []
+closed_loop_data = []
+open_loop_data = []
+residuals_data = []
 
 # Initialize warm-start parameters
 prev_sol_x = None
@@ -183,9 +185,9 @@ for i in range(SIM_DURATION - N):
     velocity_vector = vehicle.get_velocity()
     v0 = ca.sqrt(velocity_vector.x ** 2 + velocity_vector.y ** 2)
 
-    # Append current state
+    # Store current state in the closed-loop trajectory data
     if i > 0:
-        closed_loop_trajectory.append([x0, y0])
+        closed_loop_data.append([x0, y0, theta0, v0])
 
     # Set initial state for optimization problem
     initial_state = ca.vertcat(x0, y0, theta0, v0)
@@ -210,6 +212,17 @@ for i in range(SIM_DURATION - N):
         else:
             vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
 
+        # Store open-loop trajectory data
+        open_loop_trajectory = sol.value(X)
+        open_loop_data.append(open_loop_trajectory)
+
+        # Compute and store residuals if i > 0 since we need a previous state to compare
+        if i > 0:
+            predicted_state = prev_sol_x[:, 1]  # Predicted next state from the previous solution
+            actual_state = np.array([x0, y0, theta0, v0])  # Current actual state from CARLA
+            residual = actual_state - predicted_state
+            residuals_data.append(residual)
+
         # Update previous solution variables for warm-starting next iteration
         prev_sol_x = sol.value(X)
         prev_sol_u = sol.value(U)
@@ -231,7 +244,7 @@ for i in range(SIM_DURATION - N):
         ax.plot(opti.debug.value(X)[0, :], opti.debug.value(X)[1, :], 'b-')
 
         # Plot closed-loop trajectory
-        ax.plot([x[0] for x in closed_loop_trajectory], [x[1] for x in closed_loop_trajectory], 'g-')
+        ax.plot([x[0] for x in closed_loop_data], [x[1] for x in closed_loop_data], 'g-')
 
         # Display cost
         ax.text(0.1, 0.9, "Cost: {:.2f}".format(sol.value(obj)), transform=ax.transAxes)
@@ -243,8 +256,15 @@ for i in range(SIM_DURATION - N):
 
     world.tick()  # Tick the CARLA world
 
-# Store closed-loop trajectory in csv file
-closed_loop_trajectory = np.array(closed_loop_trajectory)
-np.savetxt("closed_loop_trajectory.csv", closed_loop_trajectory, delimiter=",")
+# Convert stored data to numpy arrays for easier handling
+closed_loop_data = np.array(closed_loop_data)
+open_loop_data = np.array(open_loop_data)
+residuals_data = np.array(residuals_data)
+
+# Save the data to CSV files
+np.savetxt("closed_loop_data.csv", closed_loop_data, delimiter=",", header="x,y,theta,v", comments="")
+np.savetxt("open_loop_data.csv", open_loop_data.reshape(-1, state_dim * (N + 1)), delimiter=",",
+           header=",".join(f"x{k},y{k},theta{k},v{k}" for k in range(N + 1)), comments="")
+np.savetxt("residuals_data.csv", residuals_data, delimiter=",", header="dx,dy,dtheta,dv", comments="")
 
 print("Done.")
