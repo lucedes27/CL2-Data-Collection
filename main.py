@@ -7,7 +7,7 @@ import os
 
 from boxconstraint import BoxConstraint
 
-SIM_DURATION = 1000  # Simulation duration in time steps
+SIM_DURATION = 200  # Simulation duration in time steps
 
 ## SETUP ##
 # Connect to CARLA
@@ -133,7 +133,7 @@ opti.subject_to(X[:, 0] == P)  # Initial state constraint
 
 # Input constraints
 steering_angle_bounds = [-1.0, 1.0]
-acceleration_bounds = [0.0, 1.0]
+acceleration_bounds = [-1.0, 1.0]
 lb = np.array([steering_angle_bounds[0], acceleration_bounds[0]]).reshape(-1, 1)
 ub = np.array([steering_angle_bounds[1], acceleration_bounds[1]]).reshape(-1, 1)
 action_space = BoxConstraint(lb=lb, ub=ub)
@@ -184,7 +184,8 @@ for i in range(SIM_DURATION - N):
     v0 = ca.sqrt(velocity_vector.x ** 2 + velocity_vector.y ** 2)
 
     # Append current state
-    closed_loop_trajectory.append([x0, y0])
+    if i > 0:
+        closed_loop_trajectory.append([x0, y0])
 
     # Set initial state for optimization problem
     initial_state = ca.vertcat(x0, y0, theta0, v0)
@@ -204,7 +205,10 @@ for i in range(SIM_DURATION - N):
     # If the solver is successful, apply the first control input to the vehicle
     if sol.stats()['success']:
         u = sol.value(U[:, 0])
-        vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
+        if u[1] < 0:
+            vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0], reverse=True))
+        else:
+            vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]), reverse=False)
 
         # Update previous solution variables for warm-starting next iteration
         prev_sol_x = sol.value(X)
@@ -217,7 +221,7 @@ for i in range(SIM_DURATION - N):
 
         # Plot spawn point and arrow for spawn orientation
         ax.plot(x_spawn, y_spawn, 'bo')
-        ax.arrow(x_spawn, y_spawn, 1 * ca.cos(theta_spawn), 1 * ca.sin(theta_spawn), width=0.1)
+        ax.arrow(x_spawn, y_spawn, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn), width=0.1)
 
         # Plot current state and goal state
         ax.plot(x0, y0, 'go')
@@ -238,5 +242,9 @@ for i in range(SIM_DURATION - N):
         print("Error in optimization problem.")
 
     world.tick()  # Tick the CARLA world
+
+# Store closed-loop trajectory in csv file
+closed_loop_trajectory = np.array(closed_loop_trajectory)
+np.savetxt("closed_loop_trajectory.csv", closed_loop_trajectory, delimiter=",")
 
 print("Done.")
