@@ -208,7 +208,7 @@ for i in range(SIM_DURATION - N):
         if u[1] < 0:
             vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0], reverse=True))
         else:
-            vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]), reverse=False)
+            vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
 
         # Update previous solution variables for warm-starting next iteration
         prev_sol_x = sol.value(X)
