@@ -168,9 +168,18 @@ residuals_data = []
 prev_sol_x = None
 prev_sol_u = None
 
+folder_name = 'debug_plots'
+if not os.path.exists(folder_name):
+    os.makedirs(folder_name)
+
 # Clear debug_plots folder
-for filename in os.listdir('debug_plots'):
-    os.remove('debug_plots/' + filename)
+for file in os.listdir(folder_name):
+    file_path = os.path.join(folder_name, file)
+    try:
+        if os.path.isfile(file_path):
+            os.unlink(file_path)
+    except Exception as e:
+        print(e)
 
 # Main Loop
 for i in range(SIM_DURATION - N):
@@ -249,7 +258,8 @@ for i in range(SIM_DURATION - N):
         # Display cost
         ax.text(0.1, 0.9, "Cost: {:.2f}".format(sol.value(obj)), transform=ax.transAxes)
 
-        plt.savefig("debug_plots/{}_{}.png".format(i, datetime.datetime.now()))
+        # Save figure with iteration number and timestamp
+        plt.savefig(f"{folder_name}/iteration_{i}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
         plt.close(fig)
     else:
         print("Error in optimization problem.")
