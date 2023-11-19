@@ -118,6 +118,7 @@ max_steering_angle_rad = max_steering_angle_deg * (ca.pi / 180)  # Maximum steer
 # Dynamics (Euler discretization using bicycle model)
 for k in range(N):
     steering_angle_rad = U[0, k] * max_steering_angle_rad  # Convert normalized steering angle to radians
+
     opti.subject_to(X[:, k + 1] == X[:, k] + dt * ca.vertcat(
         X[3, k] * ca.cos(X[2, k]),
         X[3, k] * ca.sin(X[2, k]),
