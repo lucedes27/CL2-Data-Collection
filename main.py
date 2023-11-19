@@ -18,12 +18,15 @@ spectator = world.get_spectator()
 
 # CARLA Settings
 settings = world.get_settings()
+# Timing settings
 settings.synchronous_mode = True  # Enables synchronous mode
 TIME_STEP = 0.05  # Time step for synchronous mode
 settings.fixed_delta_seconds = TIME_STEP
+# Physics substep settings
 settings.substepping = True
 settings.max_substep_delta_time = 0.01
 settings.max_substeps = 10
+
 world.apply_settings(settings)
 
 # Output client and world objects to console
@@ -56,20 +59,10 @@ else:
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 print(vehicle)
 
-# Get spawn coordinates and orientation
-x_spawn = spawn_point.location.x
-y_spawn = spawn_point.location.y
-theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
-
-
 def generate_waypoint_relative_to_spawn(forward_offset=0, sideways_offset=0):
-    # Positive forward_offset moves the waypoint in front of the vehicle
-    # Positive (input) sideways_offset moves the waypoint to the right of the vehicle
-    sideways_offset = -sideways_offset
-    return ca.vertcat(
-        x_spawn + forward_offset * ca.cos(theta_spawn) + sideways_offset * ca.sin(theta_spawn),
-        y_spawn + forward_offset * ca.sin(theta_spawn) - sideways_offset * ca.cos(theta_spawn)
-    )
+    waypoint_x = spawn_point.location.x + spawn_point.get_forward_vector().x * forward_offset + spawn_point.get_right_vector().x * sideways_offset
+    waypoint_y = spawn_point.location.y + spawn_point.get_forward_vector().y * forward_offset + spawn_point.get_right_vector().y * sideways_offset
+    return ca.vertcat(waypoint_x, waypoint_y)
 
 
 waypoints = []
@@ -79,7 +72,8 @@ for i in range(SIM_DURATION):
 
 # Parameters
 params = {'L': 2.5}  # Wheelbase of the vehicle
-N = 20  # Prediction horizon for optimization prbolem
+T = 2.0  # Prediction horizon in seconds
+N = int(T / TIME_STEP)  # Prediction horizon in time steps
 dt = TIME_STEP  # Time step for discretization
 state_dim = 4  # Dimension of the state [x, y, theta, v]
 control_dim = 2  # Dimension of the control input [steering angle, acceleration]
@@ -91,13 +85,16 @@ opti = ca.Opti()
 X = opti.variable(state_dim, N + 1)  # state trajectory variables over prediction horizon
 U = opti.variable(control_dim, N)  # control trajectory variables over prediction horizon
 P = opti.parameter(state_dim)  # initial state parameter
-Q = ca.MX.eye(state_dim)  # state penalty matrix for objective function
-R = 0.1 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
+Q_base = ca.diag([1, 1, 0.0, 1])  # Base state penalty matrix (emphasizes position states)
+weight_increase_factor = 1.00  # Increase factor for each step in the prediction horizon
+R = 0.2 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
 W = opti.parameter(2, N)  # Reference trajectory parameter
 
 # Objective
 obj = 0
 for k in range(N):
+    Q = Q_base * (weight_increase_factor ** k)  # Increase weight for each step in the prediction horizon
+
     x_k = X[:, k]  # Current state
     u_k = U[:, k]  # Current control input
     x_next = X[:, k + 1]  # Next state
@@ -124,7 +121,7 @@ for k in range(N):
     opti.subject_to(X[:, k + 1] == X[:, k] + dt * ca.vertcat(
         X[3, k] * ca.cos(X[2, k]),
         X[3, k] * ca.sin(X[2, k]),
-        X[3, k] / params['L'] * ca.tan(steering_angle_rad),
+        (X[3, k] / params['L']) * ca.tan(steering_angle_rad),
         U[1, k]
     ))
 
@@ -138,17 +135,29 @@ lb = np.array([steering_angle_bounds[0], acceleration_bounds[0]]).reshape(-1, 1)
 ub = np.array([steering_angle_bounds[1], acceleration_bounds[1]]).reshape(-1, 1)
 action_space = BoxConstraint(lb=lb, ub=ub)
 
+# State constraints
+# x_bounds = [-10000, 1000]  # x position bounds (effectively no bounds)
+# y_bounds = [-1000, 1000]  # y position bounds (effectively no bounds)
+# theta_bounds = [0, 360]  # theta bounds in degrees
+# v_bounds = [-10, 10]  # velocity bounds
+# lb = np.array([x_bounds[0], y_bounds[0], theta_bounds[0], v_bounds[0]]).reshape(-1, 1)
+# ub = np.array([x_bounds[1], y_bounds[1], theta_bounds[1], v_bounds[1]]).reshape(-1, 1)
+# state_space = BoxConstraint(lb=lb, ub=ub)
+
 # Apply constraints to optimization problem
 for i in range(N):
     # Input constraints
     opti.subject_to(action_space.H_np @ U[:, i] <= action_space.b_np)
 
+    # State constraints
+    # opti.subject_to(state_space.H_np @ X[:, i] <= state_space.b_np)
+
 # Setup solver
 acceptable_dual_inf_tol = 1e11
 acceptable_compl_inf_tol = 1e-3
-acceptable_iter = 10
+acceptable_iter = 15
 acceptable_constr_viol_tol = 1e-3
-acceptable_tol = 1e4
+acceptable_tol = 1e-6
 
 opts = {"ipopt.acceptable_tol": acceptable_tol,
         "ipopt.acceptable_constr_viol_tol": acceptable_constr_viol_tol,
@@ -187,6 +196,16 @@ for i in range(SIM_DURATION - N):
 
     move_spectator_to_vehicle(vehicle, spectator)
 
+    # Draw current waypoints in CARLA
+    for waypoint in waypoints[i:i + N]:
+        waypoint_x = float(np.array(waypoint[0]))
+        waypoint_y = float(np.array(waypoint[1]))
+
+        carla_waypoint = carla.Location(x=waypoint_x, y=waypoint_y, z=0.5)
+
+        extent = carla.Location(x=0.5, y=0.5, z=0.5)
+        world.debug.draw_box(box=carla.BoundingBox(carla_waypoint, extent * 1e-2), rotation=carla.Rotation(pitch=0, yaw=0, roll=0), life_time=TIME_STEP*10, thickness=0.5, color=carla.Color(255, 0, 0))
+
     #  Fetch initial state from CARLA
     x0 = vehicle.get_transform().location.x
     y0 = vehicle.get_transform().location.y
@@ -216,8 +235,16 @@ for i in range(SIM_DURATION - N):
     # If the solver is successful, apply the first control input to the vehicle
     if sol.stats()['success']:
         u = sol.value(U[:, 0])
+
+        # Bound acceleration and steering angle to [-1, 1]
+        u[0] = np.clip(u[0], -1, 1)
+        u[1] = np.clip(u[1], -1, 1)
+
+        print("Steering angle: ", u[0])
+        print("Acceleration: ", u[1])
+
         if u[1] < 0:
-            vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0], reverse=True))
+            vehicle.apply_control(carla.VehicleControl(throttle=-u[1], steer=u[0], reverse=True))
         else:
             vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
 
@@ -242,12 +269,16 @@ for i in range(SIM_DURATION - N):
         ax.set_ylabel('y')
 
         # Plot spawn point and arrow for spawn orientation
-        ax.plot(x_spawn, y_spawn, 'bo')
-        ax.arrow(x_spawn, y_spawn, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn), width=0.1)
+        ax.plot(spawn_point.location.x, spawn_point.location.y, 'bo')
+        theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
+        ax.arrow(spawn_point.location.x, spawn_point.location.y, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn), width=0.1)
 
         # Plot current state and goal state
         ax.plot(x0, y0, 'go')
         ax.plot(waypoints[i][0], waypoints[i][1], 'ro')
+
+        # Plot control input as arrow (acceleration and steering angle)
+        ax.arrow(x0, y0, 0.5 * u[1] * ca.cos(theta0 + u[0]), 0.5 * u[1] * ca.sin(theta0 + u[0]), width=0.1, color='r')
 
         # Plot open-loop trajectory
         ax.plot(opti.debug.value(X)[0, :], opti.debug.value(X)[1, :], 'b-')
