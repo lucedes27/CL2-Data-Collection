@@ -50,6 +50,10 @@ spawn_point = spawn_points[0]
 vehicles = world.get_actors().filter('vehicle.*')
 blueprint_library = world.get_blueprint_library()
 vehicle_bp = blueprint_library.filter('model3')[0]
+print("Vehicle blueprint attributes:")
+for attr in vehicle_bp:
+    print('  - {}'.format(attr))
+
 if len(vehicles) == 0:
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 else:
@@ -114,7 +118,7 @@ for k in range(N):
 opti.minimize(obj)
 
 # Maximum steerin angle for dynamics
-max_steering_angle_deg = 70  # Maximum steering angle in degrees
+max_steering_angle_deg = max(wheel.max_steer_angle for wheel in vehicle.get_physics_control().wheels)  # Maximum steering angle in degrees (from vehicle physics control
 max_steering_angle_rad = max_steering_angle_deg * (ca.pi / 180)  # Maximum steering angle in radians
 
 # Dynamics (Euler discretization using bicycle model)
