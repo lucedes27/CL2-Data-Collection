@@ -287,9 +287,12 @@ for i in range(SIM_DURATION - N):
         theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
         ax.arrow(spawn_point.location.x, spawn_point.location.y, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn), width=0.1)
 
-        # Plot current state and goal state
+        # Plot current state and goal state / goal orientation
         ax.plot(x0, y0, 'go')
         ax.plot(waypoints[i][0], waypoints[i][1], 'ro')
+        waypoint_x = float(waypoints[i][0].full())
+        waypoint_y = float(waypoints[i][1].full())
+        ax.arrow(waypoint_x, waypoint_y, 0.5 * ca.cos(0), 0.5 * ca.sin(0), width=0.1)
 
         # Plot control input as arrow (acceleration and steering angle)
         ax.arrow(x0, y0, 0.5 * u[1] * ca.cos(theta0 + u[0]), 0.5 * u[1] * ca.sin(theta0 + u[0]), width=0.1, color='r')
