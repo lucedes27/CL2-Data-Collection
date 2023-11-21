@@ -71,7 +71,9 @@ for i in range(SIM_DURATION):
     waypoints.append(generate_waypoint_relative_to_spawn(10, 0))
 
 # Parameters
-params = {'L': 2.5}  # Wheelbase of the vehicle
+params = {
+    'L': 2.875  # Wheelbase of the vehicle. Source : https://www.tesla.com/ownersmanual/model3/en_us/GUID-56562137-FC31-4110-A13C-9A9FC6657BF0.html
+}
 T = 2.0  # Prediction horizon in seconds
 N = int(T / TIME_STEP)  # Prediction horizon in time steps
 dt = TIME_STEP  # Time step for discretization
