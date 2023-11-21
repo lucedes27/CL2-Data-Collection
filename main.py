@@ -263,6 +263,7 @@ for i in range(SIM_DURATION - N):
 
         # Store open-loop trajectory data
         open_loop_trajectory = sol.value(X)
+        open_loop_trajectory = open_loop_trajectory.T.reshape(-1, state_dim)
         open_loop_data.append(open_loop_trajectory)
 
         # Compute and store residuals if i > 0 since we need a previous state to compare
