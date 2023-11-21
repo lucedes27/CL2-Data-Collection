@@ -35,7 +35,7 @@ print(world)
 
 
 # Function to move the spectator camera
-def move_spectator_to_vehicle(vehicle, spectator, distance=5):
+def move_spectator_to_vehicle(vehicle, spectator, distance=10):
     vehicle_location = vehicle.get_location()
     # Set viewing angle to slightly above the vehicle
     spectator_transform = carla.Transform(vehicle_location + carla.Location(z=distance), carla.Rotation(pitch=-90))
