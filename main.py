@@ -87,7 +87,7 @@ opti = ca.Opti()
 X = opti.variable(state_dim, N + 1)  # state trajectory variables over prediction horizon
 U = opti.variable(control_dim, N)  # control trajectory variables over prediction horizon
 P = opti.parameter(state_dim)  # initial state parameter
-Q_base = ca.diag([1, 1, 0.0, 1])  # Base state penalty matrix (emphasizes position states)
+Q_base = ca.MX.eye(state_dim)  # Base state penalty matrix (emphasizes position states)
 weight_increase_factor = 1.00  # Increase factor for each step in the prediction horizon
 R = 0.2 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
 W = opti.parameter(2, N)  # Reference trajectory parameter
@@ -216,6 +216,12 @@ for i in range(SIM_DURATION - N):
     velocity_vector = vehicle.get_velocity()
     v0 = ca.sqrt(velocity_vector.x ** 2 + velocity_vector.y ** 2)
 
+    print("Current x: ", x0)
+    print("Current y: ", y0)
+    print("Current yaw: ", vehicle.get_transform().rotation.yaw)
+    print("Current theta: ", theta0)
+    print("Current velocity: ", v0)
+
     # Store current state in the closed-loop trajectory data
     if i > 0:
         closed_loop_data.append([x0, y0, theta0, v0])
@@ -298,6 +304,7 @@ for i in range(SIM_DURATION - N):
     else:
         print("Error in optimization problem.")
 
+    print("")
     world.tick()  # Tick the CARLA world
 
 # Convert stored data to numpy arrays for easier handling
