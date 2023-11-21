@@ -261,9 +261,10 @@ for i in range(SIM_DURATION - N):
         else:
             vehicle.apply_control(carla.VehicleControl(throttle=u[1], steer=u[0]))
 
-        # Store open-loop trajectory data
+        # Store open-loop trajectory data with control input applied to vehicle
         open_loop_trajectory = sol.value(X)
         open_loop_trajectory = open_loop_trajectory.T.reshape(-1, state_dim)
+        open_loop_trajectory = np.hstack((open_loop_trajectory, np.tile(u, (N + 1, 1))))
         open_loop_data.append(open_loop_trajectory)
 
         # Compute and store residuals if i > 0 since we need a previous state to compare
@@ -303,8 +304,22 @@ for i in range(SIM_DURATION - N):
         # Plot closed-loop trajectory
         ax.plot([x[0] for x in closed_loop_data], [x[1] for x in closed_loop_data], 'g-')
 
-        # Display cost
-        ax.text(0.1, 0.9, "Cost: {:.2f}".format(sol.value(obj)), transform=ax.transAxes)
+        # Display cost and iteration number outside plot
+        ax.text(0.5, 1.05, f"Total Cost: {sol.value(obj):.2f}", horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes)
+        ax.text(0.5, 1.08, f"Iteration: {i}", horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes)
+
+        # Explicitly set the legend elements and labels, and display legend outside of plot
+        legend_elements = [plt.Line2D([0], [0], color='b', marker='o', label='Spawn point'),
+                            plt.Line2D([0], [0], color='g', marker='o', label='Current state'),
+                            plt.Line2D([0], [0], color='r', marker='o', label='Goal state'),
+                            plt.Line2D([0], [0], color='b', label='Open-loop trajectory'),
+                            plt.Line2D([0], [0], color='g', label='Closed-loop trajectory')]
+        ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5))
+
+        # Extend figure to fit legend, but make sure plot is still properly sized
+        fig.tight_layout(rect=[0, 0, 1, 1])
 
         # Save figure with iteration number and timestamp
         plt.savefig(f"{folder_name}/iteration_{i}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
@@ -322,8 +337,9 @@ residuals_data = np.array(residuals_data)
 
 # Save the data to CSV files
 np.savetxt("closed_loop_data.csv", closed_loop_data, delimiter=",", header="x,y,theta,v", comments="")
-np.savetxt("open_loop_data.csv", open_loop_data.reshape(-1, state_dim * (N + 1)), delimiter=",",
-           header=",".join(f"x{k},y{k},theta{k},v{k}" for k in range(N + 1)), comments="")
+np.savetxt("open_loop_data.csv", open_loop_data.reshape(-1, (state_dim + control_dim) * (N + 1)), delimiter=",",
+           header=",".join(f"x{k},y{k},theta{k},v{k},steering_angle{k},acceleration{k}" for k in range(N + 1)),
+              comments="")
 np.savetxt("residuals_data.csv", residuals_data, delimiter=",", header="dx,dy,dtheta,dv", comments="")
 
 print("Done.")
