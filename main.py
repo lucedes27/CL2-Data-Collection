@@ -7,7 +7,7 @@ import os
 
 from boxconstraint import BoxConstraint
 
-SIM_DURATION = 250  # Simulation duration in time steps
+SIM_DURATION = 500  # Simulation duration in time steps
 
 ## SETUP ##
 # Connect to CARLA
@@ -72,7 +72,7 @@ def generate_waypoint_relative_to_spawn(forward_offset=0, sideways_offset=0):
 waypoints = []
 
 for i in range(SIM_DURATION):
-    waypoints.append(generate_waypoint_relative_to_spawn(10, 0))
+    waypoints.append(generate_waypoint_relative_to_spawn(-10, 0))
 
 # Parameters
 params = {
@@ -93,7 +93,7 @@ U = opti.variable(control_dim, N)  # control trajectory variables over predictio
 P = opti.parameter(state_dim)  # initial state parameter
 Q_base = ca.MX.eye(state_dim)  # Base state penalty matrix (emphasizes position states)
 weight_increase_factor = 1.00  # Increase factor for each step in the prediction horizon
-R = 0.2 * ca.MX.eye(control_dim)  # control penalty matrix for objective function
+R = ca.MX.eye(control_dim)  # control penalty matrix for objective function
 W = opti.parameter(2, N)  # Reference trajectory parameter
 
 # Objective
