@@ -198,7 +198,7 @@ for file in os.listdir(folder_name):
         print(e)
 
 # Main Loop
-for i in range(SIM_DURATION - N):
+for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to predict N steps into the future
     print("Iteration: ", i)
 
     move_spectator_to_vehicle(vehicle, spectator)
