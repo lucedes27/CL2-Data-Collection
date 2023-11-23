@@ -12,8 +12,11 @@ SIM_DURATION = 500  # Simulation duration in time steps
 ## SETUP ##
 # Connect to CARLA
 client = carla.Client('localhost', 2000)
+maps = [m.replace('/Game/Carla/Maps/', '') for m in client.get_available_maps()]
+print('Available maps: ', maps)
 world = client.get_world()
 mymap = world.get_map()
+print('Using map: ', mymap.name)
 spectator = world.get_spectator()
 
 # CARLA Settings
@@ -63,10 +66,15 @@ else:
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 print(vehicle)
 
+
 def generate_waypoint_relative_to_spawn(forward_offset=0, sideways_offset=0):
     waypoint_x = spawn_point.location.x + spawn_point.get_forward_vector().x * forward_offset + spawn_point.get_right_vector().x * sideways_offset
     waypoint_y = spawn_point.location.y + spawn_point.get_forward_vector().y * forward_offset + spawn_point.get_right_vector().y * sideways_offset
     return ca.vertcat(waypoint_x, waypoint_y)
+
+
+def generate_waypoint(x, y):
+    return ca.vertcat(x, y)
 
 
 waypoints = []
@@ -118,7 +126,8 @@ for k in range(N):
 opti.minimize(obj)
 
 # Maximum steerin angle for dynamics
-max_steering_angle_deg = max(wheel.max_steer_angle for wheel in vehicle.get_physics_control().wheels)  # Maximum steering angle in degrees (from vehicle physics control
+max_steering_angle_deg = max(wheel.max_steer_angle for wheel in
+                             vehicle.get_physics_control().wheels)  # Maximum steering angle in degrees (from vehicle physics control
 max_steering_angle_rad = max_steering_angle_deg * (ca.pi / 180)  # Maximum steering angle in radians
 
 # Dynamics (Euler discretization using bicycle model)
@@ -211,7 +220,9 @@ for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to pred
         carla_waypoint = carla.Location(x=waypoint_x, y=waypoint_y, z=0.5)
 
         extent = carla.Location(x=0.5, y=0.5, z=0.5)
-        world.debug.draw_box(box=carla.BoundingBox(carla_waypoint, extent * 1e-2), rotation=carla.Rotation(pitch=0, yaw=0, roll=0), life_time=TIME_STEP*10, thickness=0.5, color=carla.Color(255, 0, 0))
+        world.debug.draw_box(box=carla.BoundingBox(carla_waypoint, extent * 1e-2),
+                             rotation=carla.Rotation(pitch=0, yaw=0, roll=0), life_time=TIME_STEP * 10, thickness=0.5,
+                             color=carla.Color(255, 0, 0))
 
     #  Fetch initial state from CARLA
     x0 = vehicle.get_transform().location.x
@@ -286,7 +297,8 @@ for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to pred
         # Plot spawn point and arrow for spawn orientation
         ax.plot(spawn_point.location.x, spawn_point.location.y, 'bo')
         theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
-        ax.arrow(spawn_point.location.x, spawn_point.location.y, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn), width=0.1)
+        ax.arrow(spawn_point.location.x, spawn_point.location.y, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn),
+                 width=0.1)
 
         # Plot current state and goal state / goal orientation
         ax.plot(x0, y0, 'go')
@@ -305,17 +317,18 @@ for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to pred
         ax.plot([x[0] for x in closed_loop_data], [x[1] for x in closed_loop_data], 'g-')
 
         # Display cost and iteration number outside plot
-        ax.text(0.5, 1.05, f"Total Cost: {sol.value(obj):.2f}", horizontalalignment='center', verticalalignment='center',
+        ax.text(0.5, 1.05, f"Final Cost: {sol.value(obj):.2f}", horizontalalignment='center',
+                verticalalignment='center',
                 transform=ax.transAxes)
         ax.text(0.5, 1.08, f"Iteration: {i}", horizontalalignment='center', verticalalignment='center',
                 transform=ax.transAxes)
 
         # Explicitly set the legend elements and labels, and display legend outside of plot
         legend_elements = [plt.Line2D([0], [0], color='b', marker='o', label='Spawn point'),
-                            plt.Line2D([0], [0], color='g', marker='o', label='Current state'),
-                            plt.Line2D([0], [0], color='r', marker='o', label='Goal state'),
-                            plt.Line2D([0], [0], color='b', label='Open-loop trajectory'),
-                            plt.Line2D([0], [0], color='g', label='Closed-loop trajectory')]
+                           plt.Line2D([0], [0], color='g', marker='o', label='Current state'),
+                           plt.Line2D([0], [0], color='r', marker='o', label='Goal state'),
+                           plt.Line2D([0], [0], color='b', label='Open-loop trajectory'),
+                           plt.Line2D([0], [0], color='g', label='Closed-loop trajectory')]
         ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5))
 
         # Extend figure to fit legend, but make sure plot is still properly sized
@@ -339,7 +352,7 @@ residuals_data = np.array(residuals_data)
 np.savetxt("closed_loop_data.csv", closed_loop_data, delimiter=",", header="x,y,theta,v", comments="")
 np.savetxt("open_loop_data.csv", open_loop_data.reshape(-1, (state_dim + control_dim) * (N + 1)), delimiter=",",
            header=",".join(f"x{k},y{k},theta{k},v{k},steering_angle{k},acceleration{k}" for k in range(N + 1)),
-              comments="")
+           comments="")
 np.savetxt("residuals_data.csv", residuals_data, delimiter=",", header="dx,dy,dtheta,dv", comments="")
 
 print("Done.")
