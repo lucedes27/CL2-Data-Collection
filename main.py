@@ -4,8 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime
 import os
+import shutil
 
 from boxconstraint import BoxConstraint
+from generate_plot import generate_plot_outer, generate_plot_inner
 
 SIM_DURATION = 500  # Simulation duration in time steps
 
@@ -206,6 +208,16 @@ for file in os.listdir(folder_name):
     except Exception as e:
         print(e)
 
+# Clear all subfolders in debug_plots folder
+for folder in os.listdir(folder_name):
+    folder_path = os.path.join(folder_name, folder)
+    try:
+        if os.path.isdir(folder_path):
+            shutil.rmtree(folder_path)
+    except Exception as e:
+        print(e)
+
+
 # Main Loop
 for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to predict N steps into the future
     print("Iteration: ", i)
@@ -253,6 +265,22 @@ for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to pred
         opti.set_initial(X, prev_sol_x)
         opti.set_initial(U, prev_sol_u)
 
+    # Save successive solving iterations to debug_plots folder
+    def create_callback_function():
+        def callback_function(j):
+            fig = generate_plot_inner(spawn_point, x0, y0, theta0, waypoints, i, X, opti, obj, closed_loop_data)
+            # Create folder for iteration i if it doesn't exist
+            subfolder_name = f"carla_timestep_{i}"
+            if not os.path.exists(f"{folder_name}/{subfolder_name}"):
+                os.makedirs(f"{folder_name}/{subfolder_name}")
+            fig.savefig(f"{folder_name}/{subfolder_name }/opti_iteration_{j}.png")
+            plt.close(fig)
+
+        return callback_function
+
+    callback_function = create_callback_function()
+    opti.callback(lambda j: callback_function(j))
+
     # Solve the optimization problem
     sol = opti.solve()
 
@@ -289,54 +317,14 @@ for i in range(SIM_DURATION - N):  # Subtract N since we need to be able to pred
         prev_sol_x = sol.value(X)
         prev_sol_u = sol.value(U)
 
-        # Plot open-loop trajectory
-        fig, ax = plt.subplots(1, 1)
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
+        # Generate plot
+        fig = generate_plot_outer(spawn_point, x0, y0, theta0, waypoints, i, u, X, opti, obj, sol, closed_loop_data)
 
-        # Plot spawn point and arrow for spawn orientation
-        ax.plot(spawn_point.location.x, spawn_point.location.y, 'bo')
-        theta_spawn = spawn_point.rotation.yaw / 180 * ca.pi
-        ax.arrow(spawn_point.location.x, spawn_point.location.y, 0.5 * ca.cos(theta_spawn), 0.5 * ca.sin(theta_spawn),
-                 width=0.1)
-
-        # Plot current state and goal state / goal orientation
-        ax.plot(x0, y0, 'go')
-        ax.plot(waypoints[i][0], waypoints[i][1], 'ro')
-        waypoint_x = float(waypoints[i][0].full())
-        waypoint_y = float(waypoints[i][1].full())
-        ax.arrow(waypoint_x, waypoint_y, 0.5 * ca.cos(0), 0.5 * ca.sin(0), width=0.1)
-
-        # Plot control input as arrow (acceleration and steering angle)
-        ax.arrow(x0, y0, 0.5 * u[1] * ca.cos(theta0 + u[0]), 0.5 * u[1] * ca.sin(theta0 + u[0]), width=0.1, color='r')
-
-        # Plot open-loop trajectory
-        ax.plot(opti.debug.value(X)[0, :], opti.debug.value(X)[1, :], 'b-')
-
-        # Plot closed-loop trajectory
-        ax.plot([x[0] for x in closed_loop_data], [x[1] for x in closed_loop_data], 'g-')
-
-        # Display cost and iteration number outside plot
-        ax.text(0.5, 1.05, f"Final Cost: {sol.value(obj):.2f}", horizontalalignment='center',
-                verticalalignment='center',
-                transform=ax.transAxes)
-        ax.text(0.5, 1.08, f"Iteration: {i}", horizontalalignment='center', verticalalignment='center',
-                transform=ax.transAxes)
-
-        # Explicitly set the legend elements and labels, and display legend outside of plot
-        legend_elements = [plt.Line2D([0], [0], color='b', marker='o', label='Spawn point'),
-                           plt.Line2D([0], [0], color='g', marker='o', label='Current state'),
-                           plt.Line2D([0], [0], color='r', marker='o', label='Goal state'),
-                           plt.Line2D([0], [0], color='b', label='Open-loop trajectory'),
-                           plt.Line2D([0], [0], color='g', label='Closed-loop trajectory')]
-        ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5))
-
-        # Extend figure to fit legend, but make sure plot is still properly sized
-        fig.tight_layout(rect=[0, 0, 1, 1])
-
-        # Save figure with iteration number and timestamp
-        plt.savefig(f"{folder_name}/iteration_{i}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        # Save fig with iteration number and timestamp
+        fig.savefig(f"{folder_name}/iteration_{i}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
         plt.close(fig)
+
+
     else:
         print("Error in optimization problem.")
 
