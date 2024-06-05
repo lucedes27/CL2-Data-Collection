@@ -1,5 +1,6 @@
 import carla
 import time
+import casadi as ca
 import numpy as np
 
 x_positions_kin = [0.0, 0.09485289983358218, 0.2837272351280737, 0.5466400599573308, 0.9114024874037739,
@@ -101,22 +102,48 @@ theta_positions_oracle = [0.0, 0.00031639294907751203, 0.001566217455374281, 0.0
                           -0.029654055388233274, -0.0009459287566045262, 0.024968460824649395, 0.026090993975512212,
                           0.026090993975512212, 0.026090992963840563]
 
+x_positions_ref = [0.0, 0.05197892798780363, 0.20650542908988914, 0.4614640790142682, 0.8147394534689532,
+                   1.2642161281619555, 1.8077786788012866, 2.44331168109496, 3.1686997107509858, 3.9818273434773768,
+                   4.880579154982146, 5.862839720973302, 6.926493617158857, 8.06942541924683, 9.289519702945222,
+                   10.584661043962054, 11.952734018005334, 13.391623200783071, 14.89921316800328, 16.473388495373978,
+                   18.112033758603168, 19.813033533398865, 21.57427239546908, 23.37863164547466, 25.083992898391813,
+                   26.53638318687511, 27.752999372561973, 28.7876669661883, 29.69421147848998, 30.5264584202029,
+                   31.338233302062953, 32.183290585647086, 33.10216181796901, 34.10673241327517, 35.20514105282146,
+                   36.40552641786375, 37.7160271896579, 39.14478204945978, 40.69992967852528, 42.389608758110256,
+                   44.20410268297253, 45.919377701191415, 47.23778230642949, 48.17740839047784, 48.84947717497363,
+                   49.3652215285437, 49.83587431981499, 50.372668417414324, 51.086805466961465, 52.05346747249868,
+                   53.24244317756768, 54.60434649646862, 56.08979134350168, 57.649391632966996, 59.23376127916476,
+                   60.79351419639513, 62.27926429895823, 63.64162550115428, 64.83121171728337, 65.80577328977931,
+                   66.56921561910455, 67.14380786366304, 67.55186622374327, 67.81570689963381, 67.95764609162323, 68.0,
+                   68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0,
+                   68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0, 68.0,
+                   68.0, 68.0, 68.0]
+y_positions_ref = [1.2, 1.202530145256064, 1.2096440233056416, 1.2206267975708103, 1.2347636314736496,
+                   1.2513396884362387, 1.2696401318806558, 1.2889501252289792, 1.3085548319032876, 1.3277394153256594,
+                   1.3457890389181741, 1.3619888661029096, 1.3756240603019447, 1.3859797849373585, 1.3923412034312288,
+                   1.393993479205635, 1.390221775682655, 1.380311256284368, 1.363547084432852, 1.3392144235501868,
+                   1.3065984370584498, 1.2649842883797202, 1.2136571409360766, 1.1622811409416383, 1.2069926340270085,
+                   1.4503194015694991, 1.8701940434665951, 2.4178904815320634, 3.0446826375796725, 3.7018444334231875,
+                   4.340649790876379, 4.91243643272521, 5.380416040816493, 5.733524051476587, 5.964060405425303,
+                   6.0643250433824445, 6.026617906067823, 5.843238934201243, 5.506488068502513, 5.0086652496914414,
+                   4.350627700602538, 3.6359457697514026, 3.0098453153419618, 2.49609254212864, 2.082559332645115,
+                   1.7571130803902568, 1.5076211788629525, 1.321951021562077, 1.1879713292397291, 1.0950819751391594,
+                   1.0371629757337935, 1.0089094468782507, 1.005016504427151, 1.0201792642351142, 1.0490928421567602,
+                   1.086452354046709, 1.12695291575958, 1.1652896431499935, 1.1961576520725685, 1.2150770391500274,
+                   1.2229034882921426, 1.2226155587250416, 1.2171972477805004, 1.2096325527902956, 1.2029054710862035,
+                   1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2,
+                   1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2]
+
 # Connect to CARLA
 client = carla.Client('localhost', 2000)
 client.set_timeout(2.0)
 world = client.get_world()
 
-# # CARLA Settings
-# settings = world.get_settings()
-# # Timing settings
-# settings.synchronous_mode = True  # Enables synchronous mode
-# TIME_STEP = 0.05  # Time step for synchronous mode
-# settings.fixed_delta_seconds = TIME_STEP
-# # Physics substep settings
-# settings.substepping = True
-# settings.max_substep_delta_time = 0.01
-# settings.max_substeps = 10
-# world.apply_settings(settings)
+# Enable synchronous mode
+settings = world.get_settings()
+settings.synchronous_mode = True
+settings.fixed_delta_seconds = 0.05
+world.apply_settings(settings)
 
 # Get the vehicle blueprint
 blueprint_library = world.get_blueprint_library()
@@ -126,6 +153,11 @@ vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
 spawn_point = carla.Transform(carla.Location(x=x_positions_kin[0], y=y_positions_kin[0], z=1))
 vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 vehicle.set_simulate_physics(False)
+
+# Attach a camera to the vehicle
+camera_bp = blueprint_library.find('sensor.camera.rgb')
+camera_transform = carla.Transform(carla.Location(x=-5, z=2.5))  # Adjust camera position relative to the vehicle
+camera = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
 
 
 # Function to teleport the vehicle
@@ -142,9 +174,47 @@ def move_spectator_to_vehicle(spectator, vehicle):
     spectator.set_transform(carla.Transform(transform.location + carla.Location(z=20), carla.Rotation(pitch=-90)))
 
 
-# Teleport the vehicle over time
-for x, y, theta in zip(x_positions_kin, y_positions_kin, theta_positions_kin):
+# Create a helper function for interpolation
+def interpolate_trajectory(x, y, theta, num_points=500):
+    t = np.linspace(0, 1, len(x))
+    t_new = np.linspace(0, 1, num_points)
+    x_new = np.interp(t_new, t, x)
+    y_new = np.interp(t_new, t, y)
+    theta_new = np.interp(t_new, t, theta)
+    return x_new, y_new, theta_new
+
+
+def spawn_marker(world, location, color=(0, 255, 0), life_time=1000.0):
+    debug = world.debug
+    debug.draw_box(
+        box=carla.BoundingBox(location, carla.Vector3D(0.1, 0.1, 0.1)),
+        rotation=carla.Rotation(pitch=0, yaw=0, roll=0),
+        thickness=0.1,
+        color=carla.Color(*color),
+        life_time=life_time
+    )
+
+
+x_offset = 0
+y_offset = 10
+# Apply offsets to the oracle trajectory
+x_positions_oracle = [x + x_offset for x in x_positions_oracle]
+y_positions_oracle = [y + y_offset for y in y_positions_oracle]
+
+x_positions_ref = [x + x_offset for x in x_positions_ref]
+y_positions_ref = [y + y_offset for y in y_positions_ref]
+
+for x, y in zip(x_positions_ref, y_positions_ref):
+    location = carla.Location(x=x, y=y, z=1)  # z=1 to make it slightly above the ground
+    spawn_marker(world, location)
+
+# Interpolate the trajectory
+x_interp, y_interp, theta_interp = interpolate_trajectory(x_positions_oracle, y_positions_oracle,
+                                                          theta_positions_oracle)
+
+# Teleport the vehicle over the interpolated points
+for x, y, theta in zip(x_interp, y_interp, theta_interp):
     teleport_vehicle(vehicle, x, y, theta)
     move_spectator_to_vehicle(world.get_spectator(), vehicle)
     print(f'Teleporting vehicle to x: {x}, y: {y}, theta: {theta}')
-    time.sleep(0.1)
+    world.tick()
